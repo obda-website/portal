@@ -62,3 +62,28 @@ async function loadTiles() {
 function usingRemote() {
   return !!(PORTAL_API && remoteTiles);
 }
+
+/* ---- remote admin password (hashed, stored by the worker) ---- */
+
+let remoteAdminHash = undefined; // undefined = not loaded yet
+
+async function fetchRemoteAdminHash() {
+  if (!PORTAL_API || remoteFailed) return null;
+  try {
+    const res = await fetch(PORTAL_API + "/admin/hash", { cache: "no-store" });
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    return typeof data === "string" ? data : null;
+  } catch (e) {
+    remoteFailed = true;
+    return null;
+  }
+}
+
+// null = no shared override (use the local/built-in default)
+async function remoteAdminHashOrNull() {
+  if (remoteAdminHash === undefined) {
+    remoteAdminHash = await fetchRemoteAdminHash();
+  }
+  return remoteAdminHash;
+}

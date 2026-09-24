@@ -13,7 +13,7 @@ npx serve .
 ## Passwords
 
 - **Cool stuff** (regular): no password — the portal is open to anyone who knows the URL.
-- **Admin**: the built-in default is stored **only as a SHA-256 hash** — in `CONFIG` at the top of `app.js` (login) and in `DEFAULT_HASHES` in `tilemanager.js` (admin popup + reset). Plain-text passwords are deliberately not documented here.
+- **Admin**: one shared password, stored **only as SHA-256 hashes**. The built-in default lives in `app.js` and as the Cloudflare secret `EDIT_PASSWORD_HASH`; a password changed from the panel is stored hashed in the worker's KV and applies to everyone. "Reset" restores the built-in default.
 
 To change one, compute its hash and paste it into the matching `*PasswordHash` field:
 
@@ -21,7 +21,12 @@ To change one, compute its hash and paste it into the matching `*PasswordHash` f
 node -e "console.log(require('crypto').createHash('sha256').update('newpassword').digest('hex'))"
 ```
 
-Or change it at runtime from the **Passwords** panel in the admin portal — it's hashed and saved to that browser's `localStorage` (a "Reset" button restores the built-in defaults).
+The current admin password can be changed from the **Passwords** panel in the admin portal — it's verified against and updated on the worker, so the change applies to every browser. To change the *built-in default* instead, compute its SHA-256 hex and update the Cloudflare secret:
+
+```
+node -e "console.log(require('crypto').createHash('sha256').update('newpassword').digest('hex'))"
+npx wrangler secret put EDIT_PASSWORD_HASH
+```
 
 Note: this hides the plaintext, but it's still a client-side gate (an attacker with devtools can see the hashes and brute-force short ones). For real security, use a backend or a hosted auth service.
 
@@ -32,13 +37,13 @@ Note: this hides the plaintext, but it's still a client-side gate (an attacker w
 - Any user can **Edit layout** to rearrange tiles (◀ / ▶ on each tile) and **Done** to save — order is remembered
 - Admin sees an ⚙ Admin button that opens the tile manager in a separate popup window
 - Tile manager (tilemanager.html): add tiles, remove tiles, and toggle each tile's visibility (All users / Regular only / Admin only) — changes appear on the main page immediately. Requires the admin password.
-- The admin password can be changed from the admin portal — it's hashed (SHA-256) in the browser and stored; "Reset" restores the built-in default
+- The admin password can be changed from the admin portal — verified and stored hashed on Cloudflare, so it applies to all browsers; "Reset" restores the built-in default
 - Zoom slider (90–300px) for tile size, remembered per browser
 - Dark theme only; responsive for mobile and desktop
 
 ## Data
 
-Zoom level and password overrides are stored in the browser's `localStorage` (preferences, per browser). Tiles are shared across all browsers when the Cloudflare Worker is configured (see "Shared tile storage" below); otherwise they fall back to per-browser `localStorage`.
+Zoom level is a per-browser preference in `localStorage`. Tiles and the admin password are shared via the Cloudflare Worker (see "Shared tile storage" above); if the worker is unreachable, both fall back to per-browser copies.
 
 ## Shared tile storage (Cloudflare Worker + KV)
 
@@ -52,7 +57,7 @@ To manage it from this folder (requires a free Cloudflare account, one-time `npx
 - Change the edit password: compute its SHA-256 hex (`node -e "console.log(require('crypto').createHash('sha256').update('PASSWORD').digest('hex'))"`), then `npx wrangler secret put EDIT_PASSWORD_HASH` (it will prompt).
 - Inspect/backup tile data: `npx wrangler kv key get tiles --namespace-id <KV_NAMESPACE_ID>`
 
-Behavior: the shared store wins when reachable; if the worker is down/unconfigured, the page falls back to per-browser `localStorage` (existing behavior), so the site never breaks. Tile reordering is public; adding/removing tiles or changing visibility requires the admin password (checked by the worker, so the hash never ships in the repo).
+Behavior: the shared store wins when reachable; if the worker is down/unconfigured, the page falls back to per-browser `localStorage` (existing behavior), so the site never breaks. Tile reordering is public; adding/removing tiles, changing visibility, and changing the admin password require the admin password (checked by the worker — the password never exists in the repo, only hashes).
 
 ## Deploy to GitHub Pages
 

@@ -6,17 +6,20 @@
 //   POST /tiles/order  -> reorder tiles by id (public; must be a permutation of stored ids)
 //
 // Secrets (Cloudflare dashboard -> Worker -> Settings -> Variables and Secrets):
-//   EDIT_PASSWORD_HASH  (Encrypt)  SHA-256 hex of the admin password
+//   EDIT_PASSWORD_HASH  (Encrypt)  SHA-256 hex of the built-in default admin password
 // Variables:
 //   TILES (KV namespace binding)
 //   ALLOW_ORIGIN (optional, comma-separated list; default: your GitHub Pages origin)
+//
+// The current admin password can also be changed at runtime via POST /admin/hash;
+// its hash is stored in KV under "edit_hash" and takes precedence over the secret.
 
 function corsHeaders(env, origin) {
   const allowed = (env.ALLOW_ORIGIN || "https://<username>.github.io").split(",").map((s) => s.trim());
   const allow = origin && allowed.includes(origin) ? origin : allowed[0];
   return {
     "Access-Control-Allow-Origin": allow,
-    "Access-Control-Allow-Methods": "GET, PUT, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, X-Portal-Password",
     "Access-Control-Max-Age": "86400"
   };
@@ -36,6 +39,23 @@ function json(body, status, env, origin) {
       "Cache-Control": "no-store"
     }
   });
+}
+
+async function storedHash(env) {
+  return (await env.TILES.get("edit_hash", "json")) || null;
+}
+
+// Accepts either the runtime hash (KV, set via POST /admin/hash) or the
+// built-in default (encrypted secret).
+async function passwordOk(env, pw) {
+  if (!pw) return false;
+  const h = await sha256hex(pw);
+  const kvHash = await storedHash(env);
+  return (kvHash && h === kvHash) || (!!env.EDIT_PASSWORD_HASH && h === env.EDIT_PASSWORD_HASH);
+}
+
+async function authorized(request, env) {
+  return passwordOk(env, request.headers.get("X-Portal-Password") || "");
 }
 
 function validTiles(v) {
@@ -60,7 +80,7 @@ export default {
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders(env, origin) });
     }
-    if (!url.pathname.startsWith("/tiles")) {
+    if (!url.pathname.startsWith("/tiles") && !url.pathname.startsWith("/admin")) {
       return json({ error: "not found" }, 404, env, origin);
     }
 
@@ -70,9 +90,7 @@ export default {
     }
 
     if (url.pathname === "/tiles" && request.method === "PUT") {
-      const pw = request.headers.get("X-Portal-Password") || "";
-      if (!env.EDIT_PASSWORD_HASH) return json({ error: "not configured" }, 500, env, origin);
-      if (!pw || (await sha256hex(pw)) !== env.EDIT_PASSWORD_HASH) {
+      if (!(await authorized(request, env))) {
         return json({ error: "unauthorized" }, 401, env, origin);
       }
       let body;
@@ -106,6 +124,38 @@ export default {
       const byId = new Map(tiles.map((t) => [t.id, t]));
       await env.TILES.put("tiles", JSON.stringify(order.map((id) => byId.get(id))));
       return json({ moved: true }, 200, env, origin);
+    }
+
+    if (url.pathname === "/admin/hash" && request.method === "GET") {
+      return json(await storedHash(env), 200, env, origin);
+    }
+
+    if (url.pathname === "/admin/hash" && request.method === "POST") {
+      if (!(await authorized(request, env))) {
+        return json({ error: "unauthorized" }, 401, env, origin);
+      }
+      let body;
+      try {
+        body = await request.json();
+      } catch (e) {
+        return json({ error: "bad json" }, 400, env, origin);
+      }
+      if (!body || typeof body.current !== "string" || typeof body.next !== "string" || body.next.length < 4 || body.next.length > 128) {
+        return json({ error: "bad request" }, 400, env, origin);
+      }
+      if (!(await passwordOk(env, body.current))) {
+        return json({ error: "unauthorized" }, 401, env, origin);
+      }
+      await env.TILES.put("edit_hash", JSON.stringify(await sha256hex(body.next)));
+      return json({ changed: true }, 200, env, origin);
+    }
+
+    if (url.pathname === "/admin/hash" && request.method === "DELETE") {
+      if (!(await authorized(request, env))) {
+        return json({ error: "unauthorized" }, 401, env, origin);
+      }
+      await env.TILES.delete("edit_hash");
+      return json({ reset: true }, 200, env, origin);
     }
 
     return json({ error: "not found" }, 404, env, origin);

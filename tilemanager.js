@@ -32,8 +32,13 @@ function showSaveError(msg) {
 
 /* ---- admin gate ---- */
 
+const POPUP_UNLOCK_KEY = "portal.popup.unlocked";
+
+// The popup must earn its own unlock: sessionStorage is copied from the opener
+// on window.open, so trusting the main page's session would skip the password
+// prompt and leave no password to send to the worker.
 function unlocked() {
-  return sessionStorage.getItem(SESSION_KEY) === "admin";
+  return sessionStorage.getItem(POPUP_UNLOCK_KEY) === "1";
 }
 
 function setGate() {
@@ -44,9 +49,11 @@ function setGate() {
 $("#gate-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const pw = $("#gate-password").value;
-  if (pw !== "" && (await sha256(pw)) === expectedHash("admin")) {
+  const adminHash = (await remoteAdminHashOrNull()) || expectedHash("admin");
+  if (pw !== "" && (await sha256(pw)) === adminHash) {
     adminPw = pw;
     sessionStorage.setItem(SESSION_KEY, "admin");
+    sessionStorage.setItem(POPUP_UNLOCK_KEY, "1");
     $("#gate-password").value = "";
     $("#gate-error").textContent = "";
     setGate();
@@ -127,7 +134,10 @@ async function save() {
         body: JSON.stringify(tiles)
       });
       if (res.status === 401) {
-        showSaveError("Admin password rejected");
+        showSaveError("Admin password rejected — please re-enter");
+        adminPw = "";
+        sessionStorage.removeItem(POPUP_UNLOCK_KEY);
+        setGate();
         return;
       }
       if (!res.ok) throw new Error(res.status);
@@ -174,17 +184,58 @@ function flash(msg, warn) {
 
 async function savePassword() {
   const input = $("#pw-admin-new");
-  if (input.value.length < 4) {
+  const next = input.value;
+  if (next.length < 4) {
     flash("Use at least 4 characters", true);
     input.focus();
     return;
   }
-  localStorage.setItem(PW_KEYS.admin, await sha256(input.value));
+  const hash = await sha256(next);
+  if (usingRemote()) {
+    try {
+      const res = await fetch(PORTAL_API + "/admin/hash", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ current: adminPw, next })
+      });
+      if (res.status === 401) {
+        flash("Current admin password is wrong", true);
+        input.focus();
+        return;
+      }
+      if (!res.ok) throw new Error(res.status);
+      remoteAdminHash = hash;
+      adminPw = next;
+    } catch (e) {
+      localStorage.setItem(PW_KEYS.admin, hash);
+      input.value = "";
+      flash("Saved for this browser only — server unreachable", true);
+      return;
+    }
+    localStorage.setItem(PW_KEYS.admin, hash);
+  } else {
+    localStorage.setItem(PW_KEYS.admin, hash);
+  }
   input.value = "";
-  flash("Saved ✓");
+  flash("Saved ✓ — all users will need the new password");
 }
 
-function resetPassword() {
+async function resetPassword() {
+  if (usingRemote()) {
+    try {
+      const res = await fetch(PORTAL_API + "/admin/hash", {
+        method: "DELETE",
+        headers: { "X-Portal-Password": adminPw }
+      });
+      if (!res.ok) {
+        flash(res.status === 401 ? "Current admin password is wrong" : "Reset failed", true);
+        return;
+      }
+      remoteAdminHash = null;
+    } catch (e) {
+      flash("Reset for this browser only — server unreachable", true);
+    }
+  }
   localStorage.removeItem(PW_KEYS.admin);
   flash("Reset to default ✓");
 }

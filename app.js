@@ -163,7 +163,8 @@ function init() {
       ok = true;
     } else {
       const pw = $("#password").value;
-      ok = pw !== "" && (await sha256(pw)) === expectedHash("admin");
+      const adminHash = (await remoteAdminHashOrNull()) || expectedHash("admin");
+      ok = pw !== "" && (await sha256(pw)) === adminHash;
     }
     if (ok) {
       role = selectedRole;

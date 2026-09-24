@@ -156,6 +156,7 @@ function setRole(r) {
   $("#login-error").textContent = "";
   const open = r === "regular";
   $("#password").classList.toggle("hidden", open);
+  $("#password").required = !open;
   $("#login-submit").textContent = open ? "Enter" : "Log in";
   if (open) $("#password").value = "";
 }

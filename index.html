@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portal</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E🔐%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div id="login-view">
+    <div class="login-card">
+      <h1 id="login-title">🔐 Portal</h1>
+      <p class="sub muted">Sign in to continue</p>
+      <div class="role-toggle">
+        <button type="button" id="role-regular" class="role-btn active">Cool stuff</button>
+        <button type="button" id="role-admin" class="role-btn">Admin</button>
+      </div>
+      <form id="login-form">
+        <input type="password" id="password" placeholder="Password" autocomplete="current-password" required>
+        <button type="submit" class="primary">Log in</button>
+      </form>
+      <p class="error" id="login-error"></p>
+    </div>
+  </div>
+
+  <div id="main-view" class="hidden">
+    <header>
+      <h1 id="portal-title">🔐 Portal</h1>
+      <div class="controls">
+        <label class="zoom" title="Tile size">
+          <span>🔍</span>
+          <input type="range" id="zoom" min="90" max="300" step="5" value="160">
+        </label>
+        <button id="admin-btn" class="hidden" title="Manage tiles">⚙ Admin</button>
+        <button id="logout-btn" title="Log out">Log out</button>
+      </div>
+    </header>
+    <main class="grid" id="tile-grid"></main>
+    <footer id="role-footer"></footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

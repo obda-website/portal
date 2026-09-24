@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manage Tiles</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E⚙️%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div id="gate" class="login-card hidden">
+    <h1>⚙ Admin access</h1>
+    <p class="sub muted">Enter the admin password</p>
+    <form id="gate-form">
+      <input type="password" id="gate-password" placeholder="Admin password" autocomplete="current-password" required>
+      <button type="submit" class="primary">Unlock</button>
+    </form>
+    <p class="error" id="gate-error"></p>
+  </div>
+
+  <div id="manager">
+    <h1>⚙ Manage tiles</h1>
+    <p class="sub muted">Changes save automatically to this browser. <span id="saved">Saved ✓</span></p>
+
+    <div class="panel">
+      <h2>Add tile</h2>
+      <form id="add-form">
+        <input id="f-icon" placeholder="🔗" maxlength="200" title="Emoji or image URL">
+        <input id="f-text" placeholder="Label (required)" required>
+        <input id="f-url" placeholder="https://…">
+        <select id="f-vis" title="Who can see this tile">
+          <option value="all">All users</option>
+          <option value="regular">Regular only</option>
+          <option value="admin">Admin only</option>
+        </select>
+        <button type="submit" class="primary">Add</button>
+        <p class="hint muted">Icon: an emoji or a link to an image.</p>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Tiles <span id="count"></span></h2>
+      <div id="list"></div>
+      <p class="muted hidden" id="empty">No tiles yet — add one above.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Passwords</h2>
+      <p class="hint muted">Stored as a hash in this browser only (no backend). “Reset” restores the built-in default.</p>
+      <form id="pw-regular" class="pw-form">
+        <label class="pw-label" for="pw-regular-new">Cool stuff</label>
+        <input type="password" id="pw-regular-new" placeholder="New password" minlength="4" required autocomplete="new-password">
+        <button type="submit" class="primary">Save</button>
+        <button type="button" class="pw-reset" data-role="regular">Reset</button>
+      </form>
+      <form id="pw-admin" class="pw-form">
+        <label class="pw-label" for="pw-admin-new">Admin</label>
+        <input type="password" id="pw-admin-new" placeholder="New password" minlength="4" required autocomplete="new-password">
+        <button type="submit" class="primary">Save</button>
+        <button type="button" class="pw-reset" data-role="admin">Reset</button>
+      </form>
+      <p class="pw-flash" id="pw-flash"></p>
+    </div>
+
+    <button id="close-btn">Close</button>
+  </div>
+
+  <script src="tilemanager.js"></script>
+</body>
+</html>

@@ -1,8 +1,9 @@
 const CONFIG = {
   title: "🔐 Portal",
-  // SHA-256 of the admin password, compared against the hash of what the user types.
+  // sha256 of the built-in default admin password (local-only fallback; the
+  // shared password lives on the worker and is verified via POST /admin/verify).
   // Regenerate with: node -e "console.log(require('crypto').createHash('sha256').update('PASSWORD').digest('hex'))"
-  adminPasswordHash: "130c2a2781e58ba5c101c55de0cf60bae64c9313c5900284382faa6dab6c310b"
+  adminPasswordHash: "1b6a07e1fab4f871cf2c75b662f8016dce5799944ff99ab8268de2a2deca21f3"
 };
 
 const ZOOM_KEY = "portal.zoom";
@@ -177,8 +178,7 @@ function init() {
       ok = true;
     } else {
       const pw = $("#password").value;
-      const adminHash = (await remoteAdminHashOrNull()) || expectedHash("admin");
-      ok = pw !== "" && (await sha256(pw)) === adminHash;
+      ok = await verifyAdmin(pw, expectedHash("admin"));
     }
     if (ok) {
       role = selectedRole;

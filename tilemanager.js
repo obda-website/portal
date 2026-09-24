@@ -1,9 +1,11 @@
 const SESSION_KEY = "portal.session";
 const PW_KEYS = { admin: "portal.pw.admin" };
 
-// Built-in default admin password (SHA-256). Overrides made in this popup live in this browser only.
+// Built-in default admin password (SHA-256, local-only fallback; the shared
+// password lives on the worker). Overrides made in this popup live in this
+// browser only.
 const DEFAULT_HASHES = {
-  admin: "130c2a2781e58ba5c101c55de0cf60bae64c9313c5900284382faa6dab6c310b"
+  admin: "1b6a07e1fab4f871cf2c75b662f8016dce5799944ff99ab8268de2a2deca21f3"
 };
 
 function expectedHash(roleKey) {
@@ -50,8 +52,7 @@ function setGate() {
 $("#gate-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const pw = $("#gate-password").value;
-  const adminHash = (await remoteAdminHashOrNull()) || expectedHash("admin");
-  if (pw !== "" && (await sha256(pw)) === adminHash) {
+  if (await verifyAdmin(pw, expectedHash("admin"))) {
     adminPw = pw;
     sessionStorage.setItem(SESSION_KEY, "admin");
     sessionStorage.setItem(POPUP_UNLOCK_KEY, "1");
@@ -131,7 +132,7 @@ async function save() {
     try {
       const res = await fetch(PORTAL_API + "/tiles", {
         method: "PUT",
-        headers: { "Content-Type": "application/json", "X-Portal-Password": adminPw },
+        headers: { "Content-Type": "application/json", "X-Portal-Password": await sha256(adminPw) },
         body: JSON.stringify(tiles)
       });
       if (res.status === 401) {
@@ -177,7 +178,7 @@ $("#hide-admin").addEventListener("change", async () => {
     try {
       const res = await fetch(PORTAL_API + "/settings", {
         method: "PUT",
-        headers: { "Content-Type": "application/json", "X-Portal-Password": adminPw },
+        headers: { "Content-Type": "application/json", "X-Portal-Password": await sha256(adminPw) },
         body: JSON.stringify(settings)
       });
       if (res.status === 401) {
@@ -219,13 +220,13 @@ async function savePassword() {
     input.focus();
     return;
   }
-  const hash = await sha256(next);
+  const nextHash = await sha256(next);
   if (usingRemote()) {
     try {
       const res = await fetch(PORTAL_API + "/admin/hash", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ current: adminPw, next })
+        body: JSON.stringify({ current: await sha256(adminPw), next: nextHash })
       });
       if (res.status === 401) {
         flash("Current admin password is wrong", true);
@@ -233,17 +234,16 @@ async function savePassword() {
         return;
       }
       if (!res.ok) throw new Error(res.status);
-      remoteAdminHash = hash;
       adminPw = next;
     } catch (e) {
-      localStorage.setItem(PW_KEYS.admin, hash);
+      localStorage.setItem(PW_KEYS.admin, nextHash);
       input.value = "";
       flash("Saved for this browser only — server unreachable", true);
       return;
     }
-    localStorage.setItem(PW_KEYS.admin, hash);
+    localStorage.setItem(PW_KEYS.admin, nextHash);
   } else {
-    localStorage.setItem(PW_KEYS.admin, hash);
+    localStorage.setItem(PW_KEYS.admin, nextHash);
   }
   input.value = "";
   flash("Saved ✓ — all users will need the new password");
@@ -255,16 +255,15 @@ async function resetPassword() {
     try {
       const res = await fetch(PORTAL_API + "/admin/hash", {
         method: "DELETE",
-        headers: { "X-Portal-Password": adminPw }
+        headers: { "X-Portal-Password": await sha256(adminPw) }
       });
-      if (res.ok) remoteAdminHash = null;
-      else remoteOk = false;
+      if (!res.ok) remoteOk = false;
     } catch (e) {
       remoteOk = false;
     }
   }
-  // Always clear the local override: the built-in default is always accepted
-  // by the worker, so this is the escape hatch if the passwords ever diverge.
+// Always clear the local override: clearing the shared hash makes the
+// built-in default authoritative again (worker-side escape hatch).
   localStorage.removeItem(PW_KEYS.admin);
   if (remoteOk) flash("Reset to default ✓");
   else flash("Local reset done — shared reset failed, try again", true);

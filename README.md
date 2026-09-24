@@ -13,22 +13,18 @@ npx serve .
 ## Passwords
 
 - **Cool stuff** (regular): no password — the portal is open to anyone who knows the URL.
-- **Admin**: one shared password, stored **only as SHA-256 hashes**. The built-in default lives in `app.js` and as the Cloudflare secret `EDIT_PASSWORD_HASH`; a password changed from the panel is stored hashed in the worker's KV and applies to everyone. "Reset" restores the built-in default.
-
-To change one, compute its hash and paste it into the matching `*PasswordHash` field:
-
-```
-node -e "console.log(require('crypto').createHash('sha256').update('newpassword').digest('hex'))"
-```
-
-The current admin password can be changed from the **Passwords** panel in the admin portal — it's verified against and updated on the worker, so the change applies to every browser. To change the *built-in default* instead, compute its SHA-256 hex and update the Cloudflare secret:
+- **Admin**: one shared password. The browser never sends plaintext: it sends `sha256(pw)` and the worker verifies it server-side against a stored hash of `sha256(PEPPER + sha256(pw))`. `PEPPER` lives only on Cloudflare (secret), so a stored hash can't be cracked offline.
+  - The **shared** password (worker KV) is the single source of truth once set. The built-in default (`EDIT_PASSWORD_HASH` secret) is only valid while no shared password has been set — a bootstrap/escape hatch, not a permanent backdoor.
+  - Changing the password from the panel updates KV, which invalidates the built-in default. "Reset" clears KV, making the built-in default authoritative again.
+- Local-only mode (worker unreachable, or `PORTAL_API` empty in `shared.js`): the browser falls back to comparing `sha256(pw)` against the hash committed in `app.js`/`tilemanager.js` or a per-browser override in `localStorage`. To set one, compute its hash and paste it into the matching `*PasswordHash` field:
 
 ```
 node -e "console.log(require('crypto').createHash('sha256').update('newpassword').digest('hex'))"
-npx wrangler secret put EDIT_PASSWORD_HASH
 ```
 
-Note: this hides the plaintext, but it's still a client-side gate (an attacker with devtools can see the hashes and brute-force short ones). For real security, use a backend or a hosted auth service.
+The current shared admin password is changed from the **Passwords** panel in the admin portal — verified and updated on the worker, so the change applies to every browser. To rotate the *built-in default* instead, recompute `sha256(PEPPER + sha256(newpassword))` (you need the existing `PEPPER` secret) and set it via `npx wrangler secret bulk <file> --config wrangler.local.jsonc` (JSON `{"EDIT_PASSWORD_HASH": "…"}`).
+
+Note: the default password's hash is committed to this repo (crackable offline if the password is weak), so use a strong default and change the shared password from the panel to invalidate it. For real security, use a backend or a hosted auth service.
 
 ## Features
 
@@ -55,7 +51,7 @@ Tiles are shared across **all** browsers/devices via the included `worker.js`, d
 To manage it from this folder (requires a free Cloudflare account, one-time `npx wrangler login`; put the real values in a local, uncommitted `wrangler.local.jsonc`):
 
 - Redeploy the worker: `npx wrangler deploy --config wrangler.local.jsonc`
-- Change the edit password: compute its SHA-256 hex (`node -e "console.log(require('crypto').createHash('sha256').update('PASSWORD').digest('hex'))"`), then `npx wrangler secret put EDIT_PASSWORD_HASH --config wrangler.local.jsonc` (it will prompt).
+- Change the shared admin password: use the admin panel (stored in KV by the worker). To rotate the *bootstrap* default instead, set a new `EDIT_PASSWORD_HASH` = `sha256(PEPPER + sha256(pw))` via `npx wrangler secret bulk <file> --config wrangler.local.jsonc`.
 - Inspect/backup tile data: `npx wrangler kv key get tiles --namespace-id <TILES namespace id from wrangler.local.jsonc>`
 
 Behavior: the shared store wins when reachable; if the worker is down/unconfigured, the page falls back to per-browser `localStorage` (existing behavior), so the site never breaks. Tile reordering is public; adding/removing tiles, changing visibility, and changing the admin password require the admin password (checked by the worker — the password never exists in the repo, only hashes).

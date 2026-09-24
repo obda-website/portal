@@ -6,15 +6,25 @@
 //   POST /tiles/order  -> reorder tiles by id (public; must be a permutation of stored ids)
 //   GET  /settings     -> shared settings (public): { hideAdminTiles: boolean }
 //   PUT  /settings     -> replace settings (requires admin password)
+//   POST /admin/verify -> check admin password: { h: sha256(pw) } -> { ok: boolean }
+//   POST /admin/hash   -> change admin password (requires current): { current, next }, both sha256(pw)
+//   DELETE /admin/hash -> reset to bootstrap password (requires admin password)
+//
+// Auth model: the client sends sha256(pw) — never the plaintext — in the
+// X-Portal-Password header / password-change body. The worker stores and
+// compares the *outer* hash sha256(PEPPER + sha256(pw)), so a leaked hash
+// cannot be cracked without the server-side PEPPER.
 //
 // Secrets (Cloudflare dashboard -> Worker -> Settings -> Variables and Secrets):
-//   EDIT_PASSWORD_HASH  (Encrypt)  SHA-256 hex of the built-in default admin password
+//   PEPPER              (Encrypt)  long random string; mixed into every stored hash
+//   EDIT_PASSWORD_HASH  (Encrypt)  sha256(PEPPER + sha256(default_pw)); bootstrap only
 // Variables:
 //   TILES (KV namespace binding)
 //   ALLOW_ORIGIN (optional, comma-separated list; default: your GitHub Pages origin)
 //
-// The current admin password can also be changed at runtime via POST /admin/hash;
-// its hash is stored in KV under "edit_hash" and takes precedence over the secret.
+// The runtime password (KV "edit_hash" = sha256(PEPPER + sha256(pw))) is the
+// single source of truth once set; the bootstrap secret is used only while KV
+// is empty. Change via POST /admin/hash; reset via DELETE /admin/hash.
 
 function corsHeaders(env, origin) {
   const allowed = (env.ALLOW_ORIGIN || "https://example.com").split(",").map((s) => s.trim());
@@ -47,18 +57,26 @@ async function storedHash(env) {
   return (await env.TILES.get("edit_hash", "json")) || null;
 }
 
-// Accepts either the runtime hash (KV, set via POST /admin/hash) or the
-// built-in default (encrypted secret).
-async function passwordOk(env, pw) {
-  if (!pw) return false;
-  const h = await sha256hex(pw);
+// Outer hash: sha256(PEPPER + inner), where inner = sha256(pw).
+async function outerHash(env, inner) {
+  return await sha256hex((env.PEPPER || "") + inner);
+}
+
+// `inner` is sha256(pw). KV is authoritative once set; the bootstrap secret
+// is only used while KV is empty (single source of truth — no backdoor).
+async function passwordOk(env, inner) {
+  if (!inner) return false;
+  const outer = await outerHash(env, inner);
   const kvHash = await storedHash(env);
-  return (kvHash && h === kvHash) || (!!env.EDIT_PASSWORD_HASH && h === env.EDIT_PASSWORD_HASH);
+  if (kvHash) return outer === kvHash;
+  return !!(env.EDIT_PASSWORD_HASH && outer === env.EDIT_PASSWORD_HASH);
 }
 
 async function authorized(request, env) {
   return passwordOk(env, request.headers.get("X-Portal-Password") || "");
 }
+
+const HEX64 = /^[0-9a-f]{64}$/;
 
 function validTiles(v) {
   if (!Array.isArray(v) || v.length > 500) return false;
@@ -128,8 +146,15 @@ export default {
       return json({ moved: true }, 200, env, origin);
     }
 
-    if (url.pathname === "/admin/hash" && request.method === "GET") {
-      return json(await storedHash(env), 200, env, origin);
+    if (url.pathname === "/admin/verify" && request.method === "POST") {
+      let body;
+      try {
+        body = await request.json();
+      } catch (e) {
+        return json({ error: "bad json" }, 400, env, origin);
+      }
+      const ok = !!(body && typeof body.h === "string") && (await passwordOk(env, body.h));
+      return json({ ok }, 200, env, origin);
     }
 
     if (url.pathname === "/admin/hash" && request.method === "POST") {
@@ -142,13 +167,13 @@ export default {
       } catch (e) {
         return json({ error: "bad json" }, 400, env, origin);
       }
-      if (!body || typeof body.current !== "string" || typeof body.next !== "string" || body.next.length < 4 || body.next.length > 128) {
+      if (!body || typeof body.current !== "string" || typeof body.next !== "string" || !HEX64.test(body.current) || !HEX64.test(body.next)) {
         return json({ error: "bad request" }, 400, env, origin);
       }
       if (!(await passwordOk(env, body.current))) {
         return json({ error: "unauthorized" }, 401, env, origin);
       }
-      await env.TILES.put("edit_hash", JSON.stringify(await sha256hex(body.next)));
+      await env.TILES.put("edit_hash", JSON.stringify(await outerHash(env, body.next)));
       return json({ changed: true }, 200, env, origin);
     }
 

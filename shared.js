@@ -63,29 +63,30 @@ function usingRemote() {
   return !!(PORTAL_API && remoteTiles);
 }
 
-/* ---- remote admin password (hashed, stored by the worker) ---- */
+/* ---- admin password verification (worker or local) ---- */
 
-let remoteAdminHash = undefined; // undefined = not loaded yet
-
-async function fetchRemoteAdminHash() {
-  if (!PORTAL_API || remoteFailed) return null;
-  try {
-    const res = await fetch(PORTAL_API + "/admin/hash", { cache: "no-store" });
-    if (!res.ok) throw new Error(res.status);
-    const data = await res.json();
-    return typeof data === "string" ? data : null;
-  } catch (e) {
-    remoteFailed = true;
-    return null;
+// Verify a typed admin password. When the worker is reachable it is
+// authoritative: POST /admin/verify with sha256(pw) — the password itself
+// is never sent. If the worker is unreachable, fall back to comparing
+// against the local/built-in hash (local-only mode).
+async function verifyAdmin(pw, localHash) {
+  if (!pw) return false;
+  const inner = await sha256(pw);
+  if (PORTAL_API && !remoteFailed) {
+    try {
+      const res = await fetch(PORTAL_API + "/admin/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ h: inner })
+      });
+      if (!res.ok) throw new Error(res.status);
+      const data = await res.json();
+      return !!(data && data.ok);
+    } catch (e) {
+      remoteFailed = true;
+    }
   }
-}
-
-// null = no shared override (use the local/built-in default)
-async function remoteAdminHashOrNull() {
-  if (remoteAdminHash === undefined) {
-    remoteAdminHash = await fetchRemoteAdminHash();
-  }
-  return remoteAdminHash;
+  return !!localHash && inner === localHash;
 }
 
 /* ---- remote settings (shared) ---- */

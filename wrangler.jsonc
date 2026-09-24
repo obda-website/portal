@@ -1,0 +1,14 @@
+{
+  // Only needed if you deploy from the command line (npx wrangler deploy).
+  // Dashboard deploys do not use this file.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "portal-tiles",
+  "main": "worker.js",
+  "compatibility_date": "2026-01-01",
+  "vars": {
+    "ALLOW_ORIGIN": "https://<username>.github.io,http://localhost:3000,http://localhost:5173"
+  },
+  "kv_namespaces": [
+    { "binding": "TILES", "id": "<KV_NAMESPACE_ID>" }
+  ]
+}

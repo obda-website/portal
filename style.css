@@ -325,6 +325,10 @@ footer {
   transition: opacity .25s;
 }
 #saved.show { opacity: 1; }
+#save-error {
+  color: var(--danger);
+  font-size: .8rem;
+}
 #count { font-size: .8rem; color: var(--muted); font-weight: 400; }
 
 @media (max-width: 620px) {

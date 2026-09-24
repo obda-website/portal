@@ -38,7 +38,21 @@ Note: this hides the plaintext, but it's still a client-side gate (an attacker w
 
 ## Data
 
-Tiles and zoom level are stored in the browser's `localStorage`. GitHub Pages is static, so there is no shared backend — each browser/device keeps its own tile set **and its own password changes**. A password changed in the admin portal only takes effect on that browser; other devices keep using the built-in default hashes (or their own overrides).
+Zoom level and password overrides are stored in the browser's `localStorage` (preferences, per browser). Tiles are shared across all browsers when the Cloudflare Worker is configured (see "Shared tile storage" below); otherwise they fall back to per-browser `localStorage`.
+
+## Shared tile storage (Cloudflare Worker + KV)
+
+Tiles are shared across **all** browsers/devices via the included `worker.js`, deployed as a Cloudflare Worker (free) and pointed to by `PORTAL_API` at the top of `shared.js`.
+
+**Current deployment:** `https://portal-tiles.<account>.workers.dev` (worker `portal-tiles`, KV namespace `<kv-namespace-name>`, configured in `wrangler.jsonc`).
+
+To manage it from this folder (requires a free Cloudflare account, one-time `npx wrangler login`):
+
+- Redeploy the worker: `npx wrangler deploy`
+- Change the edit password: compute its SHA-256 hex (`node -e "console.log(require('crypto').createHash('sha256').update('PASSWORD').digest('hex'))"`), then `npx wrangler secret put EDIT_PASSWORD_HASH` (it will prompt).
+- Inspect/backup tile data: `npx wrangler kv key get tiles --namespace-id <KV_NAMESPACE_ID>`
+
+Behavior: the shared store wins when reachable; if the worker is down/unconfigured, the page falls back to per-browser `localStorage` (existing behavior), so the site never breaks. Tile reordering is public; adding/removing tiles or changing visibility requires the admin password (checked by the worker, so the hash never ships in the repo).
 
 ## Deploy to GitHub Pages
 
@@ -52,7 +66,10 @@ Tiles and zoom level are stored in the browser's `localStorage`. GitHub Pages is
 | File | Purpose |
 |---|---|
 | `index.html` | Login + tile grid |
-| `tilemanager.html` | Admin popup: add/remove/toggle tiles |
-| `app.js` | Portal logic + passwords (`CONFIG`) |
+| `tilemanager.html` | Admin popup: add/remove/toggle tiles, change admin password |
+| `shared.js` | Shared logic: `PORTAL_API` setting, SHA-256, remote/local tile loading |
+| `app.js` | Portal logic + login |
 | `tilemanager.js` | Tile manager logic |
+| `worker.js` | Cloudflare Worker (shared tile storage) — deploy to Cloudflare |
+| `wrangler.jsonc` | Config for CLI deploys (`npx wrangler deploy`) |
 | `style.css` | Dark theme styles |

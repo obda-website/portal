@@ -1,29 +1,33 @@
-const TILES_KEY = "portal.tiles";
 const SESSION_KEY = "portal.session";
 const PW_KEYS = { admin: "portal.pw.admin" };
 
-const DEFAULT_TILES = [
-  { id: "d1", text: "GitHub", icon: "🐙", url: "https://github.com", visibility: "all" },
-  { id: "d2", text: "YouTube", icon: "▶️", url: "https://www.youtube.com", visibility: "all" },
-  { id: "d3", text: "Wikipedia", icon: "📚", url: "https://www.wikipedia.org", visibility: "all" },
-  { id: "d4", text: "Secret notes", icon: "📝", url: "https://docs.google.com", visibility: "admin" }
-];
-
-// Built-in default admin password (SHA-256). Overrides made in this popup live in localStorage.
+// Built-in default admin password (SHA-256). Overrides made in this popup live in this browser only.
 const DEFAULT_HASHES = {
   admin: "130c2a2781e58ba5c101c55de0cf60bae64c9313c5900284382faa6dab6c310b"
 };
 
-const $ = (s) => document.querySelector(s);
-const isUrl = (v) => /^https?:\/\//i.test(v || "");
-
-async function sha256(text) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 function expectedHash(roleKey) {
   return localStorage.getItem(PW_KEYS[roleKey]) || DEFAULT_HASHES[roleKey];
+}
+
+let tiles = [];
+let adminPw = "";
+let saveTimer, errTimer;
+
+function showSaved() {
+  const s = $("#saved");
+  s.classList.add("show");
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => s.classList.remove("show"), 1200);
+}
+
+function showSaveError(msg) {
+  const s = $("#save-error");
+  s.textContent = msg;
+  clearTimeout(errTimer);
+  errTimer = setTimeout(() => {
+    s.textContent = "";
+  }, 3000);
 }
 
 /* ---- admin gate ---- */
@@ -39,8 +43,9 @@ function setGate() {
 
 $("#gate-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const hash = await sha256($("#gate-password").value);
-  if (hash === expectedHash("admin")) {
+  const pw = $("#gate-password").value;
+  if (pw !== "" && (await sha256(pw)) === expectedHash("admin")) {
+    adminPw = pw;
     sessionStorage.setItem(SESSION_KEY, "admin");
     $("#gate-password").value = "";
     $("#gate-error").textContent = "";
@@ -53,28 +58,6 @@ $("#gate-form").addEventListener("submit", async (e) => {
 });
 
 /* ---- tiles ---- */
-
-function load() {
-  try {
-    const raw = localStorage.getItem(TILES_KEY);
-    if (raw) {
-      const t = JSON.parse(raw);
-      if (Array.isArray(t)) return t;
-    }
-  } catch (e) { /* ignore */ }
-  return DEFAULT_TILES.map((t) => ({ ...t }));
-}
-
-let tiles = load();
-let saveTimer;
-
-function save() {
-  localStorage.setItem(TILES_KEY, JSON.stringify(tiles));
-  const s = $("#saved");
-  s.classList.add("show");
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => s.classList.remove("show"), 1200);
-}
 
 function render() {
   const list = $("#list");
@@ -133,6 +116,31 @@ function render() {
   $("#empty").classList.toggle("hidden", tiles.length > 0);
 }
 
+// Saves to the shared Worker when configured, and mirrors to localStorage
+// (which also notifies the main page in the same browser via the storage event).
+async function save() {
+  if (usingRemote()) {
+    try {
+      const res = await fetch(PORTAL_API + "/tiles", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "X-Portal-Password": adminPw },
+        body: JSON.stringify(tiles)
+      });
+      if (res.status === 401) {
+        showSaveError("Admin password rejected");
+        return;
+      }
+      if (!res.ok) throw new Error(res.status);
+      remoteTiles = tiles;
+    } catch (e) {
+      showSaveError("Save failed — check connection");
+      return;
+    }
+  }
+  localStorage.setItem(TILES_KEY, JSON.stringify(tiles));
+  showSaved();
+}
+
 $("#add-form").addEventListener("submit", (e) => {
   e.preventDefault();
   const text = $("#f-text").value.trim();
@@ -150,7 +158,7 @@ $("#add-form").addEventListener("submit", (e) => {
   render();
 });
 
-/* ---- passwords ---- */
+/* ---- passwords (local to this browser) ---- */
 
 let flashTimer;
 function flash(msg, warn) {
@@ -164,30 +172,47 @@ function flash(msg, warn) {
   }, 2500);
 }
 
-async function savePassword(role) {
-  const input = $("#pw-" + role + "-new");
+async function savePassword() {
+  const input = $("#pw-admin-new");
   if (input.value.length < 4) {
     flash("Use at least 4 characters", true);
     input.focus();
     return;
   }
-  localStorage.setItem(PW_KEYS[role], await sha256(input.value));
+  localStorage.setItem(PW_KEYS.admin, await sha256(input.value));
   input.value = "";
   flash("Saved ✓");
 }
 
-function resetPassword(role) {
-  localStorage.removeItem(PW_KEYS[role]);
+function resetPassword() {
+  localStorage.removeItem(PW_KEYS.admin);
   flash("Reset to default ✓");
 }
 
 $("#pw-admin").addEventListener("submit", (e) => {
   e.preventDefault();
-  savePassword("admin");
+  savePassword();
 });
-document.querySelector('.pw-reset[data-role="admin"]').addEventListener("click", () => resetPassword("admin"));
+document.querySelector('.pw-reset[data-role="admin"]').addEventListener("click", resetPassword);
 
 $("#close-btn").addEventListener("click", () => window.close());
 
-setGate();
-render();
+window.addEventListener("storage", (e) => {
+  if (e.key !== TILES_KEY) return;
+  try {
+    const t = e.newValue ? JSON.parse(e.newValue) : null;
+    if (Array.isArray(t)) {
+      tiles = t;
+      remoteTiles = t;
+      render();
+    }
+  } catch (err) { /* ignore */ }
+});
+
+async function init() {
+  tiles = await loadTiles();
+  setGate();
+  render();
+}
+
+init();

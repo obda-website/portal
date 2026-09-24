@@ -156,7 +156,6 @@ function setRole(r) {
   $("#login-error").textContent = "";
   const open = r === "regular";
   $("#password").classList.toggle("hidden", open);
-  $("#password").required = !open;
   $("#login-submit").textContent = open ? "Enter" : "Log in";
   if (open) $("#password").value = "";
 }
@@ -171,9 +170,12 @@ function init() {
 
   $("#login-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    let ok = selectedRole === "regular";
-    if (!ok) {
-      ok = (await sha256($("#password").value)) === expectedHash("admin");
+    let ok;
+    if (selectedRole === "regular") {
+      ok = true;
+    } else {
+      const pw = $("#password").value;
+      ok = pw !== "" && (await sha256(pw)) === expectedHash("admin");
     }
     if (ok) {
       role = selectedRole;

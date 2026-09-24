@@ -19,7 +19,7 @@
       </div>
       <form id="login-form">
         <input type="password" id="password" placeholder="Password" autocomplete="current-password" required>
-        <button type="submit" class="primary">Log in</button>
+        <button type="submit" class="primary" id="login-submit">Enter</button>
       </form>
       <p class="error" id="login-error"></p>
     </div>
@@ -33,6 +33,7 @@
           <span>🔍</span>
           <input type="range" id="zoom" min="90" max="300" step="5" value="160">
         </label>
+        <button id="edit-btn" title="Rearrange tiles">Edit layout</button>
         <button id="admin-btn" class="hidden" title="Manage tiles">⚙ Admin</button>
         <button id="logout-btn" title="Log out">Log out</button>
       </div>

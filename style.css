@@ -208,6 +208,36 @@ header h1 {
   border-radius: 999px;
 }
 
+.tile-ctrls {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  background: rgba(13, 17, 23, .92);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+}
+.tile-ctrl {
+  padding: 2px 10px;
+  font-size: .9rem;
+  line-height: 1;
+}
+button.active {
+  border-color: var(--accent);
+  background: rgba(47, 129, 247, .2);
+  color: var(--accent-2);
+}
+body.editing .tile {
+  padding-bottom: 46px;
+}
+body.editing .tile:hover {
+  transform: none;
+  box-shadow: none;
+}
+
 footer {
   text-align: center;
   color: var(--muted);

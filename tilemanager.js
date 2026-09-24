@@ -1,6 +1,6 @@
 const TILES_KEY = "portal.tiles";
 const SESSION_KEY = "portal.session";
-const PW_KEYS = { regular: "portal.pw.regular", admin: "portal.pw.admin" };
+const PW_KEYS = { admin: "portal.pw.admin" };
 
 const DEFAULT_TILES = [
   { id: "d1", text: "GitHub", icon: "🐙", url: "https://github.com", visibility: "all" },
@@ -9,9 +9,8 @@ const DEFAULT_TILES = [
   { id: "d4", text: "Secret notes", icon: "📝", url: "https://docs.google.com", visibility: "admin" }
 ];
 
-// Built-in defaults (SHA-256). Overrides made in this popup live in localStorage.
+// Built-in default admin password (SHA-256). Overrides made in this popup live in localStorage.
 const DEFAULT_HASHES = {
-  regular: "b6699992051c42ccf24dc16267a7da47ca3e3fbbaa4ec809a0269f9a638d3a0b",
   admin: "130c2a2781e58ba5c101c55de0cf60bae64c9313c5900284382faa6dab6c310b"
 };
 
@@ -182,14 +181,11 @@ function resetPassword(role) {
   flash("Reset to default ✓");
 }
 
-["regular", "admin"].forEach((role) => {
-  $("#pw-" + role).addEventListener("submit", (e) => {
-    e.preventDefault();
-    savePassword(role);
-  });
-  const resetBtn = document.querySelector('.pw-reset[data-role="' + role + '"]');
-  resetBtn.addEventListener("click", () => resetPassword(role));
+$("#pw-admin").addEventListener("submit", (e) => {
+  e.preventDefault();
+  savePassword("admin");
 });
+document.querySelector('.pw-reset[data-role="admin"]').addEventListener("click", () => resetPassword("admin"));
 
 $("#close-btn").addEventListener("click", () => window.close());
 

@@ -221,23 +221,24 @@ async function savePassword() {
 }
 
 async function resetPassword() {
+  let remoteOk = true;
   if (usingRemote()) {
     try {
       const res = await fetch(PORTAL_API + "/admin/hash", {
         method: "DELETE",
         headers: { "X-Portal-Password": adminPw }
       });
-      if (!res.ok) {
-        flash(res.status === 401 ? "Current admin password is wrong" : "Reset failed", true);
-        return;
-      }
-      remoteAdminHash = null;
+      if (res.ok) remoteAdminHash = null;
+      else remoteOk = false;
     } catch (e) {
-      flash("Reset for this browser only — server unreachable", true);
+      remoteOk = false;
     }
   }
+  // Always clear the local override: the built-in default is always accepted
+  // by the worker, so this is the escape hatch if the passwords ever diverge.
   localStorage.removeItem(PW_KEYS.admin);
-  flash("Reset to default ✓");
+  if (remoteOk) flash("Reset to default ✓");
+  else flash("Local reset done — shared reset failed, try again", true);
 }
 
 $("#pw-admin").addEventListener("submit", (e) => {

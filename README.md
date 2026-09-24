@@ -50,22 +50,39 @@ Zoom level is a per-browser preference in `localStorage`. Tiles and the admin pa
 
 Tiles are shared across **all** browsers/devices via the included `worker.js`, deployed as a Cloudflare Worker (free) and pointed to by `PORTAL_API` at the top of `shared.js`.
 
-**Current deployment:** `https://portal-tiles.<account>.workers.dev` (worker `portal-tiles`, KV namespace `<kv-namespace-name>`, configured in `wrangler.jsonc`).
+**Deployment details** (KV namespace id, `ALLOW_ORIGIN`) live in `wrangler.local.jsonc` (gitignored — keep it out of the repo); the committed `wrangler.jsonc` is a placeholder template. The live worker URL the page calls is `PORTAL_API` at the top of `shared.js`.
 
-To manage it from this folder (requires a free Cloudflare account, one-time `npx wrangler login`):
+To manage it from this folder (requires a free Cloudflare account, one-time `npx wrangler login`; put the real values in a local, uncommitted `wrangler.local.jsonc`):
 
-- Redeploy the worker: `npx wrangler deploy`
-- Change the edit password: compute its SHA-256 hex (`node -e "console.log(require('crypto').createHash('sha256').update('PASSWORD').digest('hex'))"`), then `npx wrangler secret put EDIT_PASSWORD_HASH` (it will prompt).
-- Inspect/backup tile data: `npx wrangler kv key get tiles --namespace-id <KV_NAMESPACE_ID>`
+- Redeploy the worker: `npx wrangler deploy --config wrangler.local.jsonc`
+- Change the edit password: compute its SHA-256 hex (`node -e "console.log(require('crypto').createHash('sha256').update('PASSWORD').digest('hex'))"`), then `npx wrangler secret put EDIT_PASSWORD_HASH --config wrangler.local.jsonc` (it will prompt).
+- Inspect/backup tile data: `npx wrangler kv key get tiles --namespace-id <TILES namespace id from wrangler.local.jsonc>`
 
 Behavior: the shared store wins when reachable; if the worker is down/unconfigured, the page falls back to per-browser `localStorage` (existing behavior), so the site never breaks. Tile reordering is public; adding/removing tiles, changing visibility, and changing the admin password require the admin password (checked by the worker — the password never exists in the repo, only hashes).
 
 ## Deploy to GitHub Pages
 
-1. Push the contents of this folder to a GitHub repo (e.g. `portal`).
-2. In the repo: **Settings → Pages → Build and deployment → Source: Deploy from a branch**.
-3. Choose the branch (e.g. `main`) and folder `/ (root)`, then save.
-4. Your site is live at `https://<username>.github.io/<repo>/`.
+1. In the repo: **Settings → Pages → Build and deployment → Source: Deploy from a branch**.
+2. Choose the branch and folder (e.g. `main`, `/ (root)`), then save.
+3. Your site is live at `https://<username>.github.io/<repo>/` (and at the custom domain, if configured below).
+
+### Custom domain (per-repo subdomain)
+
+The domain is set **per repository** (repo **Settings → Pages → Custom domain**, e.g. `portal.example.com`), not in the profile — that's how each repo gets its own subdomain. A profile-level domain would instead apply to all project sites.
+
+DNS (Cloudflare, **DNS → Records**):
+
+| Type | Name | Target | Proxy |
+|---|---|---|---|
+| CNAME | `portal` | `<username>.github.io` | **DNS only** (grey cloud) |
+
+- Use **DNS only** (grey cloud), not proxied (orange): proxied, Cloudflare caches the page and serves stale versions after each deploy. GitHub Pages issues its own HTTPS cert for the domain, so no proxy is needed.
+- No `A` records are needed — subdomain only (apex records would only matter for the bare domain itself).
+- Enable **Enforce HTTPS** in the repo's Pages settings.
+
+### Worker CORS (important when changing domains)
+
+The tile worker only answers fetches from origins listed in `ALLOW_ORIGIN` (worker variable + local wrangler config). If the page is served from a new origin — e.g. after adding a custom domain — **add it to `ALLOW_ORIGIN` and redeploy** (`npx wrangler deploy --config wrangler.local.jsonc`). Otherwise the browser blocks the `/tiles` fetches (CORS mismatch) and the page silently falls back to default/local tiles: they look "reverted" and saving appears to do nothing.
 
 ## Files
 
@@ -77,5 +94,5 @@ Behavior: the shared store wins when reachable; if the worker is down/unconfigur
 | `app.js` | Portal logic + login |
 | `tilemanager.js` | Tile manager logic |
 | `worker.js` | Cloudflare Worker (shared tile storage) — deploy to Cloudflare |
-| `wrangler.jsonc` | Config for CLI deploys (`npx wrangler deploy`) |
+| `wrangler.jsonc` | Config template for CLI deploys — real values go in gitignored `wrangler.local.jsonc` (`npx wrangler deploy --config wrangler.local.jsonc`) |
 | `style.css` | Dark theme styles |

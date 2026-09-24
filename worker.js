@@ -17,7 +17,7 @@
 // its hash is stored in KV under "edit_hash" and takes precedence over the secret.
 
 function corsHeaders(env, origin) {
-  const allowed = (env.ALLOW_ORIGIN || "https://<username>.github.io").split(",").map((s) => s.trim());
+  const allowed = (env.ALLOW_ORIGIN || "https://example.com").split(",").map((s) => s.trim());
   const allow = origin && allowed.includes(origin) ? origin : allowed[0];
   return {
     "Access-Control-Allow-Origin": allow,

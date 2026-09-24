@@ -3,7 +3,7 @@
 // PORTAL_API: set this to your Cloudflare Worker URL after deploying worker.js
 // (see README, "Shared tile storage"). Leave empty to run 100% locally
 // (tiles stay in this browser's localStorage only).
-const PORTAL_API = "https://portal-tiles.<account>.workers.dev";
+const PORTAL_API = "https://portal-tiles.mikediswhoibe.workers.dev";
 
 const TILES_KEY = "portal.tiles";
 

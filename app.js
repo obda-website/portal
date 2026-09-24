@@ -1,5 +1,5 @@
 const CONFIG = {
-  title: "🔐 Portal",
+  title: "Cool Stuff Portal",
   // sha256 of the built-in default admin password (local-only fallback; the
   // shared password lives on the worker and is verified via POST /admin/verify).
   // Regenerate with: node -e "console.log(require('crypto').createHash('sha256').update('PASSWORD').digest('hex'))"

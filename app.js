@@ -17,16 +17,27 @@ function expectedHash(roleKey) {
   return localStorage.getItem(PW_KEYS[roleKey]) || CONFIG[roleKey + "PasswordHash"];
 }
 
+function tileVisibleFor(t, role, hideAdmin) {
+  if (t.visibility === "all") return true;
+  if (t.visibility === "regular") return role === "regular";
+  if (t.visibility === "admin") return role === "admin" || !hideAdmin;
+  return false;
+}
+
 async function visibleTiles() {
   const tiles = await loadTiles();
-  return tiles.filter((t) => t.visibility === "all" || t.visibility === role);
+  const s = await remoteSettingsOrNull();
+  const hideAdmin = !!(s && s.hideAdminTiles);
+  return tiles.filter((t) => tileVisibleFor(t, role, hideAdmin));
 }
 
 async function moveTile(tile, dir) {
   const full = await loadTiles();
+  const s = await remoteSettingsOrNull();
+  const hideAdmin = !!(s && s.hideAdminTiles);
   const i = full.findIndex((t) => t.id === tile.id);
   if (i < 0) return;
-  const vis = (t) => t.visibility === "all" || t.visibility === role;
+  const vis = (t) => tileVisibleFor(t, role, hideAdmin);
   const step = dir === "prev" ? -1 : 1;
   let j = i + step;
   while (j >= 0 && j < full.length && !vis(full[j])) j += step;
@@ -71,12 +82,15 @@ async function render() {
 
   for (const t of tiles) {
     const a = document.createElement("a");
-    a.className = "tile";
-    a.href = t.url || "#";
-    a.target = "_blank";
-    a.rel = "noopener";
-    a.title = t.url || t.text;
-    if (!t.url || editMode) a.addEventListener("click", (e) => e.preventDefault());
+    const locked = role !== "admin" && t.visibility === "admin";
+    a.className = "tile" + (locked ? " locked" : "");
+    a.href = locked ? "#" : t.url || "#";
+    if (!locked) {
+      a.target = "_blank";
+      a.rel = "noopener";
+    }
+    a.title = locked ? "Admin only" : t.url || t.text;
+    if (locked || !t.url || editMode) a.addEventListener("click", (e) => e.preventDefault());
 
     const icon = document.createElement("div");
     icon.className = "icon";
@@ -95,7 +109,7 @@ async function render() {
     label.textContent = t.text;
     a.appendChild(label);
 
-    if (role === "admin" && t.visibility === "admin") {
+    if (t.visibility === "admin") {
       const badge = document.createElement("span");
       badge.className = "badge";
       badge.textContent = "ADMIN";
@@ -213,10 +227,17 @@ function init() {
   window.addEventListener("focus", async () => {
     if (!role) return;
     const fresh = await fetchRemoteTiles();
+    const s = await fetchRemoteSettings();
+    let changed = false;
     if (fresh) {
       remoteTiles = fresh;
-      render();
+      changed = true;
     }
+    if (s) {
+      remoteSettings = s;
+      changed = true;
+    }
+    if (changed) render();
   });
 
   const session = sessionStorage.getItem(SESSION_KEY);

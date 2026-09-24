@@ -37,6 +37,7 @@ Note: this hides the plaintext, but it's still a client-side gate (an attacker w
 - Any user can **Edit layout** to rearrange tiles (◀ / ▶ on each tile) and **Done** to save — order is remembered
 - Admin sees an ⚙ Admin button that opens the tile manager in a separate popup window
 - Tile manager (tilemanager.html): add tiles, remove tiles, and toggle each tile's visibility (All users / Regular only / Admin only) — changes appear on the main page immediately. Requires the admin password.
+- Regular users see **all** tiles; "Admin only" tiles appear as locked placeholders (no link, not clickable, ADMIN badge). The admin panel's "Hide admin tiles from regular users" checkbox (shared setting) hides them entirely instead.
 - The admin password can be changed from the admin portal — verified and stored hashed on Cloudflare, so it applies to all browsers; "Reset" restores the built-in default
 - Zoom slider (90–300px) for tile size, remembered per browser
 - Dark theme only; responsive for mobile and desktop

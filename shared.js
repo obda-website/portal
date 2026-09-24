@@ -87,3 +87,27 @@ async function remoteAdminHashOrNull() {
   }
   return remoteAdminHash;
 }
+
+/* ---- remote settings (shared) ---- */
+
+let remoteSettings = undefined; // undefined = not loaded yet
+
+async function fetchRemoteSettings() {
+  if (!PORTAL_API || remoteFailed) return null;
+  try {
+    const res = await fetch(PORTAL_API + "/settings", { cache: "no-store" });
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    return data && typeof data === "object" ? data : null;
+  } catch (e) {
+    remoteFailed = true;
+    return null;
+  }
+}
+
+async function remoteSettingsOrNull() {
+  if (remoteSettings === undefined) {
+    remoteSettings = await fetchRemoteSettings();
+  }
+  return remoteSettings;
+}

@@ -11,6 +11,7 @@ function expectedHash(roleKey) {
 }
 
 let tiles = [];
+let settings = { hideAdminTiles: false };
 let adminPw = "";
 let saveTimer, errTimer;
 
@@ -168,6 +169,34 @@ $("#add-form").addEventListener("submit", (e) => {
   render();
 });
 
+/* ---- settings (shared) ---- */
+
+$("#hide-admin").addEventListener("change", async () => {
+  settings.hideAdminTiles = $("#hide-admin").checked;
+  if (usingRemote()) {
+    try {
+      const res = await fetch(PORTAL_API + "/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "X-Portal-Password": adminPw },
+        body: JSON.stringify(settings)
+      });
+      if (res.status === 401) {
+        showSaveError("Admin password rejected — please re-enter");
+        adminPw = "";
+        sessionStorage.removeItem(POPUP_UNLOCK_KEY);
+        setGate();
+        return;
+      }
+      if (!res.ok) throw new Error(res.status);
+      remoteSettings = settings;
+    } catch (e) {
+      showSaveError("Save failed — check connection");
+      return;
+    }
+  }
+  showSaved();
+});
+
 /* ---- passwords (local to this browser) ---- */
 
 let flashTimer;
@@ -263,6 +292,9 @@ window.addEventListener("storage", (e) => {
 
 async function init() {
   tiles = await loadTiles();
+  const s = await remoteSettingsOrNull();
+  if (s) settings = { hideAdminTiles: !!s.hideAdminTiles };
+  $("#hide-admin").checked = settings.hideAdminTiles;
   setGate();
   render();
 }

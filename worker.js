@@ -4,6 +4,8 @@
 //   GET  /tiles        -> shared tile list (public)
 //   PUT  /tiles        -> replace tile list (requires admin password)
 //   POST /tiles/order  -> reorder tiles by id (public; must be a permutation of stored ids)
+//   GET  /settings     -> shared settings (public): { hideAdminTiles: boolean }
+//   PUT  /settings     -> replace settings (requires admin password)
 //
 // Secrets (Cloudflare dashboard -> Worker -> Settings -> Variables and Secrets):
 //   EDIT_PASSWORD_HASH  (Encrypt)  SHA-256 hex of the built-in default admin password
@@ -80,7 +82,7 @@ export default {
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders(env, origin) });
     }
-    if (!url.pathname.startsWith("/tiles") && !url.pathname.startsWith("/admin")) {
+    if (!url.pathname.startsWith("/tiles") && !url.pathname.startsWith("/admin") && !url.pathname.startsWith("/settings")) {
       return json({ error: "not found" }, 404, env, origin);
     }
 
@@ -156,6 +158,29 @@ export default {
       }
       await env.TILES.delete("edit_hash");
       return json({ reset: true }, 200, env, origin);
+    }
+
+    if (url.pathname === "/settings" && request.method === "GET") {
+      const s = await env.TILES.get("settings", "json");
+      const ok = s && typeof s === "object" && typeof s.hideAdminTiles === "boolean";
+      return json(ok ? { hideAdminTiles: s.hideAdminTiles } : { hideAdminTiles: false }, 200, env, origin);
+    }
+
+    if (url.pathname === "/settings" && request.method === "PUT") {
+      if (!(await authorized(request, env))) {
+        return json({ error: "unauthorized" }, 401, env, origin);
+      }
+      let body;
+      try {
+        body = await request.json();
+      } catch (e) {
+        return json({ error: "bad json" }, 400, env, origin);
+      }
+      if (!body || typeof body !== "object" || typeof body.hideAdminTiles !== "boolean") {
+        return json({ error: "invalid settings" }, 400, env, origin);
+      }
+      await env.TILES.put("settings", JSON.stringify({ hideAdminTiles: body.hideAdminTiles }));
+      return json({ saved: true }, 200, env, origin);
     }
 
     return json({ error: "not found" }, 404, env, origin);
